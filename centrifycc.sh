@@ -115,6 +115,72 @@ function install_packages()
     return $r
 }
 
+function vault_accounts()
+{
+    r=0
+    if [ "$CENTRIFYCC_VAULTED_ACCOUNTS" != "" ] ; then
+        mkdir -p -m=755 /var/centrify/tmp
+        VAULT_SCRIPT=/var/centrify/tmp/vaultaccount.sh
+        VAULT_SCRIPT_LOG=/var/centrify/tmp/vaultaccount.log
+        if [ -f $VAULT_SCRIPT ] ; then
+            rm $VAULT_SCRIPT
+        fi
+
+        if [ "$CENTRIFYCC_MANAGE_PASSWORD" == "" ] ; then
+            CENTRIFYCC_MANAGE_PASSWORD = "true"
+        fi
+
+        IFS=","
+        # Create script
+        echo '#!/bin/bash' > $VAULT_SCRIPT
+        if [ "$DEBUG_SCRIPT" = "yes" ];then
+            echo "set -x" >> $VAULT_SCRIPT
+        fi
+        echo "export VAULTED_ACCOUNTS=$CENTRIFYCC_VAULTED_ACCOUNTS" >> $VAULT_SCRIPT
+        echo "export LOGIN_ROLES=\"$CENTRIFYCC_LOGIN_ROLES\"" >> $VAULT_SCRIPT
+        echo "echo \"post hook script started.\" >> $VAULT_SCRIPT_LOG" >> $VAULT_SCRIPT
+        echo "Permissions=()" >> $VAULT_SCRIPT
+        echo "Field_Separator=\$IFS" >> $VAULT_SCRIPT
+        echo "IFS=\",\"" >> $VAULT_SCRIPT
+        echo "read -a roles <<< \$LOGIN_ROLES" >> $VAULT_SCRIPT
+        echo "IFS=" >> $VAULT_SCRIPT
+        echo "for role in \${roles[@]} " >> $VAULT_SCRIPT
+        echo "  do " >> $VAULT_SCRIPT
+        #echo "     Permissions=(\"\${Permissions[@]}\" \"-p\" \"\\\"role:\$role:Edit,Checkout,View,Login\\\"\" )" >> $VAULT_SCRIPT
+        echo "     Permissions=(\"\${Permissions[@]}\" \"-p\" \"\\\"role:\$role:View,Login\\\"\" )" >> $VAULT_SCRIPT
+        echo "done" >> $VAULT_SCRIPT
+        echo "IFS=\",\"" >> $VAULT_SCRIPT
+        echo "sleep 10" >> $VAULT_SCRIPT
+        echo "for account in \$VAULTED_ACCOUNTS; do" >> $VAULT_SCRIPT
+        #echo "   export PASS=\`openssl rand -base64 10\`" >> $VAULT_SCRIPT
+	echo "   export PASS=\`openssl rand -base64 20\`" >> $VAULT_SCRIPT
+        echo "   if id -u \$account > /dev/null 2>&1; then" >> $VAULT_SCRIPT
+        echo "      echo \$PASS | passwd --stdin \$account" >> $VAULT_SCRIPT
+        echo "   else" >> $VAULT_SCRIPT
+        echo "      useradd -m \$account -g sys" >> $VAULT_SCRIPT
+        echo "      echo \$PASS | passwd --stdin \$account" >> $VAULT_SCRIPT
+        echo "   fi" >> $VAULT_SCRIPT
+        echo "   IFS=" >> $VAULT_SCRIPT
+        echo "   echo \"Vaulting password for \$account\" >> $VAULT_SCRIPT_LOG 2>&1" >> $VAULT_SCRIPT
+        echo "   echo \$PASS | /usr/sbin/csetaccount -V --stdin -m $CENTRIFYCC_MANAGE_PASSWORD \${Permissions[@]} \$account >> $VAULT_SCRIPT_LOG 2>&1" >> $VAULT_SCRIPT
+        echo "done" >> $VAULT_SCRIPT
+        echo "IFS=\$Field_Separator" >> $VAULT_SCRIPT
+
+        chmod 700 $VAULT_SCRIPT
+
+        # set up post-enroll hook
+        if [ -f /usr/sbin/cedit ] ; then
+            cedit --set cli.hook.cenroll:$VAULT_SCRIPT
+        fi
+        r=$?
+        if [ $r -ne 0 ];then
+            echo "$CENTRIFY_MSG_PREX: failed to set up post-enroll hook" && return $r
+        fi
+    fi
+
+    return $r
+}
+
 
 function prepare_for_cenroll()
 {
@@ -259,71 +325,7 @@ function install_unenroll_enroll_service()
     systemctl enable centrifycc-enroll.service
 }
 
-function vault_accounts()
-{
-    r=0
-    if [ "$CENTRIFYCC_VAULTED_ACCOUNTS" != "" ] ; then
-        mkdir -p -m=755 /var/centrify/tmp
-        VAULT_SCRIPT=/var/centrify/tmp/vaultaccount.sh
-        VAULT_SCRIPT_LOG=/var/centrify/tmp/vaultaccount.log
-        if [ -f $VAULT_SCRIPT ] ; then
-            rm $VAULT_SCRIPT
-        fi
 
-        if [ "$CENTRIFYCC_MANAGE_PASSWORD" == "" ] ; then
-            CENTRIFYCC_MANAGE_PASSWORD = "true"
-        fi
-
-        IFS=","
-        # Create script
-        echo '#!/bin/bash' > $VAULT_SCRIPT
-        if [ "$DEBUG_SCRIPT" = "yes" ];then
-            echo "set -x" >> $VAULT_SCRIPT
-        fi
-        echo "export VAULTED_ACCOUNTS=$CENTRIFYCC_VAULTED_ACCOUNTS" >> $VAULT_SCRIPT
-        echo "export LOGIN_ROLES=\"$CENTRIFYCC_LOGIN_ROLES\"" >> $VAULT_SCRIPT
-        echo "echo \"post hook script started.\" >> $VAULT_SCRIPT_LOG" >> $VAULT_SCRIPT
-        echo "Permissions=()" >> $VAULT_SCRIPT
-        echo "Field_Separator=\$IFS" >> $VAULT_SCRIPT
-        echo "IFS=\",\"" >> $VAULT_SCRIPT
-        echo "read -a roles <<< \$LOGIN_ROLES" >> $VAULT_SCRIPT
-        echo "IFS=" >> $VAULT_SCRIPT
-        echo "for role in \${roles[@]} " >> $VAULT_SCRIPT
-        echo "  do " >> $VAULT_SCRIPT
-        #echo "     Permissions=(\"\${Permissions[@]}\" \"-p\" \"\\\"role:\$role:Edit,Checkout,View,Login\\\"\" )" >> $VAULT_SCRIPT
-        echo "     Permissions=(\"\${Permissions[@]}\" \"-p\" \"\\\"role:\$role:View,Login\\\"\" )" >> $VAULT_SCRIPT
-        echo "done" >> $VAULT_SCRIPT
-        echo "IFS=\",\"" >> $VAULT_SCRIPT
-        echo "sleep 10" >> $VAULT_SCRIPT
-        echo "for account in \$VAULTED_ACCOUNTS; do" >> $VAULT_SCRIPT
-        #echo "   export PASS=\`openssl rand -base64 10\`" >> $VAULT_SCRIPT
-	echo "   export PASS=\`openssl rand -base64 20\`" >> $VAULT_SCRIPT
-        echo "   if id -u \$account > /dev/null 2>&1; then" >> $VAULT_SCRIPT
-        echo "      echo \$PASS | passwd --stdin \$account" >> $VAULT_SCRIPT
-        echo "   else" >> $VAULT_SCRIPT
-        echo "      useradd -m \$account -g sys" >> $VAULT_SCRIPT
-        echo "      echo \$PASS | passwd --stdin \$account" >> $VAULT_SCRIPT
-        echo "   fi" >> $VAULT_SCRIPT
-        echo "   IFS=" >> $VAULT_SCRIPT
-        echo "   echo \"Vaulting password for \$account\" >> $VAULT_SCRIPT_LOG 2>&1" >> $VAULT_SCRIPT
-        echo "   echo \$PASS | /usr/sbin/csetaccount -V --stdin -m $CENTRIFYCC_MANAGE_PASSWORD \${Permissions[@]} \$account >> $VAULT_SCRIPT_LOG 2>&1" >> $VAULT_SCRIPT
-        echo "done" >> $VAULT_SCRIPT
-        echo "IFS=\$Field_Separator" >> $VAULT_SCRIPT
-
-        chmod 700 $VAULT_SCRIPT
-
-        # set up post-enroll hook
-        if [ -f /usr/sbin/cedit ] ; then
-            cedit --set cli.hook.cenroll:$VAULT_SCRIPT
-        fi
-        r=$?
-        if [ $r -ne 0 ];then
-            echo "$CENTRIFY_MSG_PREX: failed to set up post-enroll hook" && return $r
-        fi
-    fi
-
-    return $r
-}
 
 function start_deploy()
 { 
