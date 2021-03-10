@@ -169,6 +169,15 @@ function do_cenroll()
 	  CMDPARAM=("${CMDPARAM[@]}" "${tempoption[@]}")
 	fi
 	
+	 # For each role that can login as vaulted account, grant them view permission to the resource 
+    if [ "$CENTRIFYCC_VAULTED_ACCOUNTS" != "" ] || [ "$CENTRIFYCC_LOGIN_ROLES" != "" ] ; then
+        IFS=","
+        for role in $CENTRIFYCC_LOGIN_ROLES
+        do
+            CMDPARAM=("${CMDPARAM[@]}" "--resource-permission" "role:$role:View")
+        done
+    fi
+	
 	echo "cenroll parameters: [${CMDPARAM[@]}]"
 	  
      /usr/sbin/cenroll  \
