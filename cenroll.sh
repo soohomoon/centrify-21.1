@@ -47,7 +47,16 @@ if [ $r -ne 0 ];then
   exit $r
 fi
 
-CMDPARAMARRAY=($CMDPARAM)
+
+IFS="|" read -a CMDPARAMARRAY <<< "$CMDPARAM"
+
+CPARAMS=()
+for i in $(echo ${!CMDPARAMARRAY[@]}); do
+    VAR=${CMDPARAMARRAY[$i]}
+    CPARAMS=("${CPARAMS[@]}" "$VAR")
+done
+
+#CMDPARAMARRAY=($CMDPARAM)
 
 /usr/sbin/cenroll  \
     --tenant "$TENANT_URL" \
@@ -55,4 +64,5 @@ CMDPARAMARRAY=($CMDPARAM)
     --features "$FEATURES" \
     --name "$COMPUTER_NAME" \
     --address "$CENTRIFYCC_NETWORK_ADDR" \
-    "${CMDPARAMARRAY[@]}"
+    "${CPARAMS[@]}"
+    #"${CMDPARAMARRAY[@]}"
