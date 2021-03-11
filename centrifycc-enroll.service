@@ -7,6 +7,7 @@ After=network.target syslog.target local-fs.target
 
 # Not forking like adclient due to a Golang daemon limitation
 # Type=forking
+Type=forking
 
 EnvironmentFile=/etc/centrifycc/cenroll.env
 
